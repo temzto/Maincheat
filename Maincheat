@@ -32,7 +32,7 @@ local MainTab = Window:CreateTab("MAIN SCRIPT", nil) -- Title, Image
 local MainSection = MainTab:CreateSection("Main")
 
 Rayfield:Notify({
-   Title = "Exclusvjr",
+   Title = "GAWANG 13GODZ",
    Content = "Thankyou For Using 13GODZ ON TOP MAIN CHEAT Script",
    Duration = 5,
    Image = nil,
