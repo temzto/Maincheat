@@ -1,43 +1,371 @@
+-- Custom Rayfield + Key GUI integration
+-- Place as a LocalScript (StarterGui or StarterPlayerScripts)
+
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Load Rayfield (still load it now, but we won't create main window until key validated)
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
-local Window = Rayfield:CreateWindow({
-   Name = "GAWANG 13 GODS",
-   Icon = 0, -- Icon in Topbar. Can use LuciferIcons (string) or Roblox Image (number). 0 to use no icon (default).
-   LoadingTitle = "GAWANG 13 GODS",
-   LoadingSubtitle = "GAWANG 13GODS",
-   ConfigurationSaving = {
-      Enabled = false,
-      FolderName = nil, -- Create a custom folder for your hub/game
-      FileName = "13GODS ON TOP"
-   },
+-- KEY CONFIG (match your Rayfield KeySettings)
+local UseRemoteKeyList = true          -- if true and RemoteKeyURL provided, will fetch keys
+local RemoteKeyURL = "https://pastebin.com/raw/YOURKEYFILE" -- set if you host keys (optional)
+local ValidKeys = {"13GODS ON TOP!!"}  -- fallback / static keys
 
-   Discord = {
-      Enabled = true, -- Prompt the user to join your Discord server if their executor supports it
-      Invite = "/j4zxsUtS", -- The Discord invite code, do not include discord.gg/. E.g. discord.gg/ ABCD would be ABCD
-      RememberJoins = true -- Set this to false to make them join the discord every time they load it up
-   },
+-- Create Key GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "13GODZ_KeyGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
 
-   KeySystem = true, -- Set this to true to use our key system
-   KeySettings = {
-      Title = "13GODS MAIN CHEAT",
-      Subtitle = "LINK IN DISCORD",
-      Note = "13GODS ON TOP!", -- Use this to tell the user how to get a key
-      FileName = "PASALAMAT KA SA 13GODS", -- It is recommended to use something unique as other scripts using Rayfield may overwrite your key file
-      SaveKey = false, -- The user's key will be saved, but if you change the key, they will be unable to use your script
-      GrabKeyFromSite = true, -- If this is true, set Key below to the RAW site you would like Rayfield to get the key from
-      Key = {"13GODS ON TOP!!"} -- List of keys that will be accepted by the system, can be RAW file links (pastebin, github etc) or simple strings ("hello","key22")
-   }
-})
-local MainTab = Window:CreateTab("MAIN SCRIPT", nil) -- Title, Image
-local MainSection = MainTab:CreateSection("Main")
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 460, 0, 200)
+frame.AnchorPoint = Vector2.new(0.5, 0.5)
+frame.Position = UDim2.new(0.5, 0.6, 0)
+frame.BackgroundColor3 = Color3.fromRGB(10,10,10)
+frame.BorderSizePixel = 0
+frame.Parent = screenGui
+frame.BackgroundTransparency = 0
 
-Rayfield:Notify({
-   Title = "discord.gg/13GODS",
-   Content = "Thankyou For Using 13GODZ ON TOP MAIN CHEAT Script",
-   Duration = 5,
-   Image = nil,
-})
+local bg = Instance.new("ImageLabel")
+bg.Parent = frame
+bg.Size = UDim2.new(1,0,1,0)
+bg.Position = UDim2.new(0,0,0,0)
+bg.BackgroundTransparency = 1
+bg.ZIndex = 0
+bg.Image = "rbxassetid://131809825293758"
+bg.ImageTransparency = 0.12
 
+local title = Instance.new("TextLabel")
+title.Parent = frame
+title.Size = UDim2.new(1,0,0,36)
+title.Position = UDim2.new(0,0,0,6)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.Text = "13GODZ MAINCHEAT"
+title.TextColor3 = Color3.new(1,1,1)
+
+local inputBox = Instance.new("TextBox")
+inputBox.Parent = frame
+inputBox.Size = UDim2.new(0.78,0,0,36)
+inputBox.Position = UDim2.new(0.11,0,0.35,0)
+inputBox.PlaceholderText = "Enter Key Here"
+inputBox.BackgroundColor3 = Color3.fromRGB(40,40,40)
+inputBox.TextColor3 = Color3.new(1,1,1)
+inputBox.Font = Enum.Font.Gotham
+inputBox.TextSize = 18
+inputBox.ClearTextOnFocus = false
+
+local submit = Instance.new("TextButton")
+submit.Parent = frame
+submit.Size = UDim2.new(0.78,0,0,44)
+submit.Position = UDim2.new(0.11,0,0.6,0)
+submit.BackgroundColor3 = Color3.fromRGB(12,150,60)
+submit.Font = Enum.Font.GothamBold
+submit.TextSize = 20
+submit.Text = "SUBMIT KEY"
+
+local note = Instance.new("TextLabel")
+note.Parent = frame
+note.Size = UDim2.new(1,0,0,20)
+note.Position = UDim2.new(0,0,1,-26)
+note.BackgroundTransparency = 1
+note.Font = Enum.Font.Gotham
+note.TextSize = 14
+note.TextColor3 = Color3.fromRGB(200,200,200)
+note.Text = "LINK IN DISCORD • 13GODS ON TOP!"
+
+-- helper: show small temporary message under input
+local function flashMessage(msg, color)
+    note.Text = msg
+    if color then note.TextColor3 = color end
+    delay(2, function()
+        note.Text = "LINK IN DISCORD • 13GODS ON TOP!"
+        note.TextColor3 = Color3.fromRGB(200,200,200)
+    end)
+end
+
+-- validate key (static list OR fetch remote)
+local function fetchRemoteKeys(url)
+    local ok, res = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if not ok then return nil, res end
+    -- expect raw text with keys separated by newlines or JSON array
+    local parsed
+    -- try JSON
+    pcall(function() parsed = HttpService:JSONDecode(res) end)
+    if type(parsed) == "table" then
+        return parsed
+    end
+    -- else split by newlines
+    local t = {}
+    for line in string.gmatch(res, "[^\r\n]+") do
+        line = line:gsub("^%s*(.-)%s*$","%1")
+        if line ~= "" then table.insert(t, line) end
+    end
+    return t
+end
+
+local remoteKeysCached = nil
+if UseRemoteKeyList and RemoteKeyURL and RemoteKeyURL ~= "" then
+    -- try fetch once (non-blocking)
+    spawn(function()
+        local keys, err = fetchRemoteKeys(RemoteKeyURL)
+        if keys then
+            remoteKeysCached = keys
+        end
+    end)
+end
+
+local function isKeyValid(k)
+    if not k or k == "" then return false end
+    -- check static keys
+    for _,v in ipairs(ValidKeys) do
+        if tostring(k) == tostring(v) then return true end
+    end
+    -- check remote cache
+    if remoteKeysCached then
+        for _,v in ipairs(remoteKeysCached) do
+            if tostring(k) == tostring(v) then return true end
+        end
+    end
+    return false
+end
+
+-- After key passes, call this to create the Rayfield GUI and features
+local function initRayfieldWindow()
+    -- Destroy/disable key GUI with fade
+    local tweenInfo = TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local tw = TweenService:Create(frame, tweenInfo, {AnchorPoint = Vector2.new(0.5, 0.5), Position = frame.Position, BackgroundTransparency = 1})
+    tw:Play()
+    wait(0.35)
+    screenGui:Destroy()
+
+    -- Create the Rayfield Window (your original config)
+    local Window = Rayfield:CreateWindow({
+       Name = "GAWANG 13 GODS",
+       Icon = 0,
+       LoadingTitle = "GAWANG 13 GODS",
+       LoadingSubtitle = "GAWANG 13GODS",
+       ConfigurationSaving = {
+          Enabled = false,
+          FolderName = nil,
+          FileName = "13GODS ON TOP"
+       },
+
+       Discord = {
+          Enabled = true,
+          Invite = "/j4zxsUtS",
+          RememberJoins = true
+       },
+
+       KeySystem = false, -- disabled because we used our custom key GUI
+       KeySettings = {
+          Title = "13GODS MAIN CHEAT",
+          Subtitle = "LINK IN DISCORD",
+          Note = "13GODS ON TOP!",
+          FileName = "PASALAMAT KA SA 13GODS",
+          SaveKey = false,
+          GrabKeyFromSite = false,
+          Key = ValidKeys
+       }
+    })
+
+    -- Custom Rayfield + Key GUI integration
+-- Place as a LocalScript (StarterGui or StarterPlayerScripts)
+
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Load Rayfield (still load it now, but we won't create main window until key validated)
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- KEY CONFIG (match your Rayfield KeySettings)
+local UseRemoteKeyList = true          -- if true and RemoteKeyURL provided, will fetch keys
+local RemoteKeyURL = "https://pastebin.com/raw/YOURKEYFILE" -- set if you host keys (optional)
+local ValidKeys = {"13GODS ON TOP!!"}  -- fallback / static keys
+
+-- Create Key GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "13GODZ_KeyGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 460, 0, 200)
+frame.AnchorPoint = Vector2.new(0.5, 0.5)
+frame.Position = UDim2.new(0.5, 0.6, 0)
+frame.BackgroundColor3 = Color3.fromRGB(10,10,10)
+frame.BorderSizePixel = 0
+frame.Parent = screenGui
+frame.BackgroundTransparency = 0
+
+local bg = Instance.new("ImageLabel")
+bg.Parent = frame
+bg.Size = UDim2.new(1,0,1,0)
+bg.Position = UDim2.new(0,0,0,0)
+bg.BackgroundTransparency = 1
+bg.ZIndex = 0
+bg.Image = "rbxassetid://131809825293758"
+bg.ImageTransparency = 0.12
+
+local title = Instance.new("TextLabel")
+title.Parent = frame
+title.Size = UDim2.new(1,0,0,36)
+title.Position = UDim2.new(0,0,0,6)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.Text = "13GODZ MAINCHEAT"
+title.TextColor3 = Color3.new(1,1,1)
+
+local inputBox = Instance.new("TextBox")
+inputBox.Parent = frame
+inputBox.Size = UDim2.new(0.78,0,0,36)
+inputBox.Position = UDim2.new(0.11,0,0.35,0)
+inputBox.PlaceholderText = "Enter Key Here"
+inputBox.BackgroundColor3 = Color3.fromRGB(40,40,40)
+inputBox.TextColor3 = Color3.new(1,1,1)
+inputBox.Font = Enum.Font.Gotham
+inputBox.TextSize = 18
+inputBox.ClearTextOnFocus = false
+
+local submit = Instance.new("TextButton")
+submit.Parent = frame
+submit.Size = UDim2.new(0.78,0,0,44)
+submit.Position = UDim2.new(0.11,0,0.6,0)
+submit.BackgroundColor3 = Color3.fromRGB(12,150,60)
+submit.Font = Enum.Font.GothamBold
+submit.TextSize = 20
+submit.Text = "SUBMIT KEY"
+
+local note = Instance.new("TextLabel")
+note.Parent = frame
+note.Size = UDim2.new(1,0,0,20)
+note.Position = UDim2.new(0,0,1,-26)
+note.BackgroundTransparency = 1
+note.Font = Enum.Font.Gotham
+note.TextSize = 14
+note.TextColor3 = Color3.fromRGB(200,200,200)
+note.Text = "LINK IN DISCORD • 13GODS ON TOP!"
+
+-- helper: show small temporary message under input
+local function flashMessage(msg, color)
+    note.Text = msg
+    if color then note.TextColor3 = color end
+    delay(2, function()
+        note.Text = "LINK IN DISCORD • 13GODS ON TOP!"
+        note.TextColor3 = Color3.fromRGB(200,200,200)
+    end)
+end
+
+-- validate key (static list OR fetch remote)
+local function fetchRemoteKeys(url)
+    local ok, res = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if not ok then return nil, res end
+    -- expect raw text with keys separated by newlines or JSON array
+    local parsed
+    -- try JSON
+    pcall(function() parsed = HttpService:JSONDecode(res) end)
+    if type(parsed) == "table" then
+        return parsed
+    end
+    -- else split by newlines
+    local t = {}
+    for line in string.gmatch(res, "[^\r\n]+") do
+        line = line:gsub("^%s*(.-)%s*$","%1")
+        if line ~= "" then table.insert(t, line) end
+    end
+    return t
+end
+
+local remoteKeysCached = nil
+if UseRemoteKeyList and RemoteKeyURL and RemoteKeyURL ~= "" then
+    -- try fetch once (non-blocking)
+    spawn(function()
+        local keys, err = fetchRemoteKeys(RemoteKeyURL)
+        if keys then
+            remoteKeysCached = keys
+        end
+    end)
+end
+
+local function isKeyValid(k)
+    if not k or k == "" then return false end
+    -- check static keys
+    for _,v in ipairs(ValidKeys) do
+        if tostring(k) == tostring(v) then return true end
+    end
+    -- check remote cache
+    if remoteKeysCached then
+        for _,v in ipairs(remoteKeysCached) do
+            if tostring(k) == tostring(v) then return true end
+        end
+    end
+    return false
+end
+
+-- After key passes, call this to create the Rayfield GUI and features
+local function initRayfieldWindow()
+    -- Destroy/disable key GUI with fade
+    local tweenInfo = TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local tw = TweenService:Create(frame, tweenInfo, {AnchorPoint = Vector2.new(0.5, 0.5), Position = frame.Position, BackgroundTransparency = 1})
+    tw:Play()
+    wait(0.35)
+    screenGui:Destroy()
+
+    -- Create the Rayfield Window (your original config)
+    local Window = Rayfield:CreateWindow({
+       Name = "GAWANG 13 GODS",
+       Icon = 0,
+       LoadingTitle = "GAWANG 13 GODS",
+       LoadingSubtitle = "GAWANG 13GODS",
+       ConfigurationSaving = {
+          Enabled = false,
+          FolderName = nil,
+          FileName = "13GODS ON TOP"
+       },
+
+       Discord = {
+          Enabled = true,
+          Invite = "/j4zxsUtS",
+          RememberJoins = true
+       },
+
+       KeySystem = false, -- disabled because we used our custom key GUI
+       KeySettings = {
+          Title = "13GODS MAIN CHEAT",
+          Subtitle = "LINK IN DISCORD",
+          Note = "13GODS ON TOP!",
+          FileName = "PASALAMAT KA SA 13GODS",
+          SaveKey = false,
+          GrabKeyFromSite = false,
+          Key = ValidKeys
+       }
+    })
+
+    -- === rest of your GUI buttons/tabs ===
+    local MainTab = Window:CreateTab("MAIN SCRIPT", nil)
+    local MainSection = MainTab:CreateSection("Main")
+
+    Rayfield:Notify({
+       Title = "discord.gg/13GODS",
+       Content = "Thankyou For Using 13GODZ ON TOP MAIN CHEAT Script",
+       Duration = 5,
+       Image = nil,
+    })
+
+    
 local Button = MainTab:CreateButton({
    Name = "INFINITE YIELD [13GODS]",
    Callback = function()
